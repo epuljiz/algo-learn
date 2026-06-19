@@ -21,6 +21,10 @@ interface GameContextType {
   activeAlgorithmId: string | null;
   setActiveAlgorithmId: (id: string | null) => void;
   updateStreak: (id: string, success: boolean) => void;
+  activeTab: 'practice' | 'lessons';
+  setActiveTab: (tab: 'practice' | 'lessons') => void;
+  completedLessons: string[];
+  completeLesson: (lessonId: string) => void;
 }
 
 const defaultAlgos: AlgorithmDef[] = [
@@ -471,6 +475,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [score, setScore] = useState(0);
   const [algorithms, setAlgorithms] = useState<AlgorithmDef[]>(defaultAlgos);
   const [activeAlgorithmId, setActiveAlgorithmId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'practice' | 'lessons'>('practice');
+  const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Load from DB on mount
@@ -494,12 +500,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return algo;
           }));
         }
+        if (data && Array.isArray(data.completedLessons)) {
+          setCompletedLessons(data.completedLessons);
+        }
         setLoaded(true);
       })
       .catch(err => {
         console.warn("Failed to load local DB, falling back to localStorage:", err);
         const savedScore = localStorage.getItem('algolearn_score');
         const savedStreaks = localStorage.getItem('algolearn_streaks');
+        const savedLessons = localStorage.getItem('algolearn_lessons');
         if (savedScore) setScore(parseInt(savedScore, 10));
         if (savedStreaks) {
           try {
@@ -514,6 +524,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
              }));
           } catch(e) {}
         }
+        if (savedLessons) {
+          try {
+            setCompletedLessons(JSON.parse(savedLessons));
+          } catch(e) {}
+        }
         setLoaded(true);
       });
   }, []);
@@ -525,10 +540,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     algorithms.forEach(algo => {
       streaks[algo.id] = algo.streak;
     });
-    const payload = { score, streaks };
+    const payload = { score, streaks, completedLessons };
 
     localStorage.setItem('algolearn_score', score.toString());
     localStorage.setItem('algolearn_streaks', JSON.stringify(streaks));
+    localStorage.setItem('algolearn_lessons', JSON.stringify(completedLessons));
 
     fetch('/api/db', {
       method: 'POST',
@@ -537,7 +553,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }).catch(err => {
       console.error("Failed to save to local DB:", err);
     });
-  }, [score, algorithms, loaded]);
+  }, [score, algorithms, completedLessons, loaded]);
 
   const addScore = (points: number) => setScore(s => s + points);
 
@@ -556,9 +572,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
   };
 
+  const completeLesson = (lessonId: string) => {
+    setCompletedLessons(prev => {
+      if (prev.includes(lessonId)) return prev;
+      return [...prev, lessonId];
+    });
+  };
+
   return (
     <GameContext.Provider value={{
-      score, addScore, algorithms, activeAlgorithmId, setActiveAlgorithmId, updateStreak
+      score, addScore, algorithms, activeAlgorithmId, setActiveAlgorithmId, updateStreak,
+      activeTab, setActiveTab, completedLessons, completeLesson
     }}>
       {children}
     </GameContext.Provider>
